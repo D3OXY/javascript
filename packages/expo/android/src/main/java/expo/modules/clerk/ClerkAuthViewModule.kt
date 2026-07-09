@@ -4,12 +4,15 @@ import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import com.clerk.api.Clerk
 import com.clerk.ui.auth.AuthMode
 import com.clerk.ui.auth.AuthView
+import com.clerk.ui.navigation.ClerkHostedNavigation
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -26,8 +29,11 @@ private fun debugLog(tag: String, message: String) {
 class ClerkAuthNativeView(context: Context, appContext: AppContext) : ClerkComposeNativeViewHost(context, appContext) {
   var isDismissible: Boolean = true
   var mode: String? = null
+  var hideHeader: Boolean = false
 
   private val onAuthEvent by EventDispatcher()
+  private val onNavigationChange by EventDispatcher()
+  private val hostedNavigation = ClerkHostedNavigation()
 
   init {
     // At cold start, ClerkExpoModule.configure() may run before React's
@@ -54,9 +60,26 @@ class ClerkAuthNativeView(context: Context, appContext: AppContext) : ClerkCompo
     viewModelStoreOwner.viewModelStore.clear()
   }
 
+  fun goBack() {
+    hostedNavigation.pop()
+  }
+
+  fun popToRoot() {
+    hostedNavigation.popToRoot()
+  }
+
   @Composable
   override fun Content() {
-    debugLog(TAG, "setupView - mode: $mode, isDismissible: $isDismissible, activity: $activity")
+    debugLog(TAG, "setupView - mode: $mode, isDismissible: $isDismissible, hideHeader: $hideHeader, activity: $activity")
+
+    val hosted = if (hideHeader) hostedNavigation else null
+    if (hosted != null) {
+      LaunchedEffect(hosted) {
+        snapshotFlow { hosted.depth }.collect { depth ->
+          onNavigationChange(mapOf("depth" to depth, "canGoBack" to (depth > 0)))
+        }
+      }
+    }
 
     AuthView(
       modifier = Modifier.fillMaxSize(),
@@ -67,6 +90,7 @@ class ClerkAuthNativeView(context: Context, appContext: AppContext) : ClerkCompo
       onAuthComplete = {
         sendDismissEvent()
       },
+      hostedNavigation = hosted,
     )
   }
 
@@ -92,7 +116,7 @@ class ClerkAuthViewModule : Module() {
     Name("ClerkAuthView")
 
     View(ClerkAuthNativeView::class) {
-      Events("onAuthEvent")
+      Events("onAuthEvent", "onNavigationChange")
 
       Prop("mode") { view: ClerkAuthNativeView, mode: String? ->
         view.mode = mode
@@ -102,10 +126,21 @@ class ClerkAuthViewModule : Module() {
         view.isDismissible = isDismissible
       }
 
+      Prop("hideHeader") { view: ClerkAuthNativeView, hideHeader: Boolean ->
+        view.hideHeader = hideHeader
+      }
+
+      AsyncFunction("goBack") { view: ClerkAuthNativeView ->
+        view.goBack()
+      }
+
+      AsyncFunction("popToRoot") { view: ClerkAuthNativeView ->
+        view.popToRoot()
+      }
+
       OnViewDidUpdateProps { view: ClerkAuthNativeView ->
         view.setupView()
       }
-
     }
   }
 }

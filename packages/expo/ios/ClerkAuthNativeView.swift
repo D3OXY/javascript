@@ -4,9 +4,12 @@ import UIKit
 public class ClerkAuthNativeView: ClerkNativeViewHost {
   private var currentMode: String = "signInOrUp"
   private var currentDismissible: Bool = true
+  private var currentHideHeader: Bool = false
   private var didSendDismiss = false
+  private var hostedNavigation: ClerkExpoHostedAuthNavigation?
 
   let onAuthEvent = EventDispatcher()
+  let onNavigationChange = EventDispatcher()
 
   func setMode(_ mode: String?) {
     let newMode = mode ?? "signInOrUp"
@@ -20,6 +23,21 @@ public class ClerkAuthNativeView: ClerkNativeViewHost {
     guard newDismissible != currentDismissible else { return }
     currentDismissible = newDismissible
     setNeedsHostedViewUpdate()
+  }
+
+  func setHideHeader(_ hideHeader: Bool?) {
+    let newHideHeader = hideHeader ?? false
+    guard newHideHeader != currentHideHeader else { return }
+    currentHideHeader = newHideHeader
+    setNeedsHostedViewUpdate()
+  }
+
+  func goBack() {
+    hostedNavigation?.goBack()
+  }
+
+  func popToRoot() {
+    hostedNavigation?.popToRoot()
   }
 
   private func sendAuthEvent(type: ClerkNativeViewEvent) {
@@ -42,9 +60,22 @@ public class ClerkAuthNativeView: ClerkNativeViewHost {
   }
 
   override func makeHostedController() -> UIViewController? {
+    let hosted: ClerkExpoHostedAuthNavigation?
+    if currentHideHeader {
+      let navigation = ClerkExpoHostedAuthNavigation()
+      navigation.onDepthChange = { [weak self] depth in
+        self?.onNavigationChange(["depth": depth, "canGoBack": depth > 0])
+      }
+      hosted = navigation
+    } else {
+      hosted = nil
+    }
+    hostedNavigation = hosted
+
     return ClerkNativeBridge.shared.makeAuthViewController(
       mode: currentMode,
       dismissible: currentDismissible,
+      hostedNavigation: hosted,
       onEvent: { [weak self] event, _ in
         if event == .dismissed {
           self?.sendDismissIfNeeded()
@@ -59,7 +90,7 @@ public class ClerkAuthViewModule: Module {
     Name("ClerkAuthView")
 
     View(ClerkAuthNativeView.self) {
-      Events("onAuthEvent")
+      Events("onAuthEvent", "onNavigationChange")
 
       Prop("mode") { (view: ClerkAuthNativeView, mode: String?) in
         view.setMode(mode)
@@ -67,6 +98,18 @@ public class ClerkAuthViewModule: Module {
 
       Prop("isDismissible") { (view: ClerkAuthNativeView, isDismissible: Bool?) in
         view.setDismissible(isDismissible)
+      }
+
+      Prop("hideHeader") { (view: ClerkAuthNativeView, hideHeader: Bool?) in
+        view.setHideHeader(hideHeader)
+      }
+
+      AsyncFunction("goBack") { (view: ClerkAuthNativeView) in
+        view.goBack()
+      }
+
+      AsyncFunction("popToRoot") { (view: ClerkAuthNativeView) in
+        view.popToRoot()
       }
     }
   }
