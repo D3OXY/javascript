@@ -1,5 +1,11 @@
 # Change Log
 
+## 4.25.3
+
+### Patch Changes
+
+- Add named protect check parameter types for future sign-in and sign-up flows. ([#9116](https://github.com/clerk/javascript/pull/9116)) by [@SarahSoutoul](https://github.com/SarahSoutoul)
+
 ## 4.25.2
 
 ### Patch Changes
